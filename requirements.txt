@@ -1,0 +1,11 @@
+jstyleson==0.0.2
+numpy==1.23.2
+opencv_python==4.7.0.72
+pandas==2.0.1
+PyAutoGUI==0.9.53
+pywin32==304
+pywinauto==0.6.8
+Requests==2.31.0
+selenium==4.15.2
+urllib3==1.26.12
+webdriver_manager==3.8.5
