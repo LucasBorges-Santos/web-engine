@@ -10,7 +10,8 @@ import pathlib
 
 
 class WebFunctionsEngine():
-    def __init__(self) -> None:
+    def __init__(self, more_functions:dict={}) -> None:
+        self.more_functions = more_functions
         self._set_web_functions()
         self._set_web_element_functions()
         
@@ -34,10 +35,13 @@ class WebFunctionsEngine():
             ### _set_web_element_functions
             Functions used in "_get_web_element_atributte";
         """
+        
         self.web_element_functions = {
             "text": lambda web_element: web_element.text,
-            "element": lambda web_element: web_element
+            "text_": lambda web_element: re.sub(r'[ /-]', '_', str(web_element.text).lower()),
+            "value": lambda web_element: web_element.get_attribute('value'),
         }
+        self.web_element_functions.update(self.more_functions)
         
     def get_web_functions(self):
         """
@@ -168,27 +172,14 @@ class WebFunctionsEngine():
         if 'this' == this_element:
             return web_element
         
-        string_tag, param_tags = self._get_element_tags(param=this_element)
-       
-        if param_tags != []:
-            result_tag = []
-            for param_tag in param_tags:
-                func, param = self._get_function_result_tag(param_tag)
-                this_element_parameters = param.replace("this", "").split()
-                web_element_consult = web_element
-                for element in  this_element_parameters:
-                    web_element_consult = self._get_element(web_element_consult, element)
+        web_element_tag_result = self._get_web_element_tag_result(web_element, this_element)
                 
-                result_tag.append(self.web_element_functions[func](web_element_consult))
-            
-            result = string_tag.format(*result_tag)
-            return result
-        
+        if web_element_tag_result != this_element:
+            return web_element_tag_result
         else:
             this_element_parameters = this_element.replace("this", "").split()
             for element in  this_element_parameters:
                 web_element = self._get_element(web_element, element)
-                
             return web_element
     
     def _get_location_tags(self, param:str, tag_open:str="\{", tag_close:str="\}") -> list[tuple]:
@@ -303,15 +294,31 @@ class WebFunctionsEngine():
             return param
         
         string_tag, param_tags = self._get_element_tags(param=param)
-        
-        if param_tags != []:
+        if param_tags:
             result_tag = []
             for param_tag in param_tags:
+                
                 func, param = self._get_function_result_tag(param_tag)
-                web_element_consult = self._get_element(driver, param)
-                result_tag.append(self.web_element_functions[func](web_element_consult))
-            result = string_tag.format(*result_tag)
-            return result
+                
+                if 'this' in param:
+                    this_element_parameters = param.replace("this", "").split()
+                    
+                    web_element_consult = driver # this instance WebElement
+                    
+                    for element in this_element_parameters:
+                        web_element_consult = self._get_element(web_element_consult, element)
+                        
+                    result_tag.append(self.web_element_functions[func](web_element_consult))
+                    
+                else:
+                    func, param = self._get_function_result_tag(param_tag)
+                    if param:
+                        web_element_consult = self._get_element(driver, param)
+                        result_tag.append(self.web_element_functions[func](web_element_consult))
+                    else:
+                        result_tag.append(self.web_element_functions[func]())
+                    
+            return string_tag.format(*result_tag) 
         else:
             return string_tag
 
@@ -339,4 +346,3 @@ class WebFunctionsEngine():
                              
             return func(self, driver, *new_args, **new_kwargs)
         return _get_web_element_atributte
-    

@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 import pathlib
 
-
+# TODO, function are not using a default motor to run action commands 
 class WebFunctions(WebFunctionsEngine):
     @WebFunctionsEngine._validation
     @WebFunctionsEngine._get_web_element_atributte
@@ -193,6 +193,8 @@ class WebFunctions(WebFunctionsEngine):
 
         elif type_wait == "WINDOW":
             wait.until(EC.new_window_is_opened(driver.window_handles))
+        elif type_wait == "TAB":
+            wait.until(EC.number_of_windows_to_be(2))
         else:
             message = "[WebEngine>wait: ERROR] Select a valid appear value (APPEAR, DISAPPEAR, CLICKABLE, PRESENCE, ALERT, WINDOW)."
             self._error_message(message)
@@ -200,7 +202,7 @@ class WebFunctions(WebFunctionsEngine):
     @WebFunctionsEngine._validation
     @WebFunctionsEngine._get_web_element_atributte
     def execute_window_command(
-        self, driver: WebDriver, action_commands: list, trigger_command: list = False
+        self, driver: WebDriver, action_commands: list, iframe_element:str=False
     ) -> None:
         """
         ### execute_window_command
@@ -211,13 +213,21 @@ class WebFunctions(WebFunctionsEngine):
 
         #### Will probably be discontinued or altered
         """
-        if trigger_command:
-            driver.web_engine.execute_commands(driver, trigger_command)
-        current_window = driver.current_window_handle
-        window_to_switch = driver.window_handles[-1]
-        driver.switch_to.window(window_to_switch)
-        driver.web_engine.execute_commands(driver, action_commands)
-        driver.switch_to.window(current_window)
+        
+        if iframe_element:
+            current_window = driver.current_window_handle
+            
+            iframe_element = self._get_element(driver, iframe_element)
+            driver.switch_to.frame(iframe_element)
+            driver.web_engine.execute_commands(driver, action_commands)
+            driver.switch_to.window(current_window)
+
+        else:        
+            current_window = driver.current_window_handle
+            window_to_switch = driver.window_handles[-1]
+            driver.switch_to.window(window_to_switch)
+            driver.web_engine.execute_commands(driver, action_commands)
+            driver.switch_to.window(current_window)
 
     @WebFunctionsEngine._validation
     @WebFunctionsEngine._get_web_element_atributte
@@ -234,18 +244,27 @@ class WebFunctions(WebFunctionsEngine):
 
     @WebFunctionsEngine._validation
     @WebFunctionsEngine._get_web_element_atributte
-    def add_cookies(self, driver: WebDriver, cookies_str: str) -> None:
+    def add_cookies(self, driver: WebDriver, cookies_str: str=False, cookie_dict:dict=False) -> None:
         """
         ### add_cookies
         Add cookies in the driver;
         @param cookies_str: Has to be in "key=value;key=value"
         """
-        for cookie_str in re.split("'|;| ", cookies_str):
-            cookie = {
-                "name": cookie_str.split("=")[0],
-                "value": cookie_str.split("=")[1],
-            }
-            driver.add_cookie(cookie)
+        if cookies_str:
+            for cookie_str in re.split("'|;| ", cookies_str):
+                cookie = {
+                    "name": cookie_str.split("=")[0],
+                    "value": cookie_str.split("=")[1],
+                }
+                driver.add_cookie(cookie)
+        
+        elif cookie_dict:
+            for key, value in cookie_dict.items():
+                cookie = {
+                    "name": key,
+                    "value": value,
+                }
+                driver.add_cookie(cookie)
 
     @WebFunctionsEngine._validation
     @WebFunctionsEngine._get_web_element_atributte
@@ -280,6 +299,8 @@ class WebFunctions(WebFunctionsEngine):
         element: str,
         token_location: str,
         wait_time: str | int,
+        account_name:str,
+        inbox_name:str,
         action_commands: list = False,
         subject: str = False,
         sender_mail: str = False,
@@ -295,35 +316,49 @@ class WebFunctions(WebFunctionsEngine):
         @param wait_time: Time to wait the email
 
         #### Will probably be altered using "__get_web_element_atributte"
+        
+        Can use '/' in 'inbox_name' to get subfolder content
         """
         if action_commands:
             driver.web_engine.execute_commands(driver, action_commands)
+        
         init_time = datetime.datetime.now()
         current_time = datetime.timedelta(0)
+        
         token = None
         while current_time <= datetime.timedelta(minutes=int(wait_time)):
             outlook = win32com.client.Dispatch(
                 "Outlook.Application", pythoncom.CoInitialize()
             ).GetNamespace("MAPI")
-            # outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
-            inbox = outlook.GetDefaultFolder(6)
+            
+            account = outlook.Folders.Item(account_name)
+            
+            folder_splited = inbox_name.split("/")
+
+            account_inbox = account.Folders[folder_splited.pop(0)]
+            while folder_splited:
+                account_inbox = account_inbox.Folders[folder_splited.pop(0)]
+            
             if sender_mail:
-                filteredItems = inbox.Items.Restrict(
+                filteredItems = account_inbox.Items.Restrict(
                     f"[SenderEmailAddress]='{sender_mail}'"
                 )
             elif subject:
-                filteredItems = inbox.Items.Restrict(f"[Subject] = '{subject}'")
+                filteredItems = account_inbox.Items.Restrict(f"[Subject] = '{subject}'")
             else:
                 message = f'[WebFunctions>insert_mail_token: ERROR] Select a "sender_mail" or a "subject"'
                 self._error_message(message)
+            
+            filteredItems.Sort("[ReceivedTime]", False)
             email_result = filteredItems.GetLast()
+            # print(email_result.Body)
             if email_result is not None:
                 email_received_time = datetime.datetime.strptime(
                     str(email_result.ReceivedTime).replace("+00:00", "").split(".")[0],
                     "%Y-%m-%d %H:%M:%S",
                 )
                 if email_received_time > init_time:
-                    token = re.findall(token_location, filteredItems.GetLast().body)
+                    token = re.findall(token_location, email_result.Body)
                     if token:
                         token = token[0]
                         break
@@ -452,6 +487,11 @@ class WebFunctions(WebFunctionsEngine):
     @WebFunctionsEngine._get_web_element_atributte
     def print(self, driver: WebDriver, value=False) -> None:
         print(value)
+        
+    # @WebFunctionsEngine._validation
+    # @WebFunctionsEngine._get_web_element_atributte
+    # def select_multiples_elementes(self, driver: WebDriver, value=False) -> None:
+    #     print(value)
 
     @WebFunctionsEngine._validation
     @WebFunctionsEngine._get_web_element_atributte
@@ -479,6 +519,8 @@ class WebFunctions(WebFunctionsEngine):
         url_location: str,
         wait_time: str | int,
         file_name: str,
+        account_name:str,
+        inbox_name:str,
     ) -> None:
         """
         :param action_commands: Command to trigger "download_from_email_link" function
@@ -495,10 +537,18 @@ class WebFunctions(WebFunctionsEngine):
             outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace(
                 "MAPI"
             )
-            inbox = outlook.GetDefaultFolder(6)
-            filteredItems = inbox.Items.Restrict(
+            
+            account = outlook.Folders.Item(account_name)
+            folder_splited = inbox_name.split("/")
+
+            account_inbox = account.Folders[folder_splited.pop(0)]
+            while folder_splited:
+                account_inbox = account_inbox.Folders[folder_splited.pop(0)]
+            
+            filteredItems = account_inbox.Items.Restrict(
                 f"[SenderEmailAddress]='{sender_mail}'"
             )
+            filteredItems.Sort("[ReceivedTime]", False)
             email_result = filteredItems.GetLast()
 
             if email_result is not None:
@@ -516,6 +566,7 @@ class WebFunctions(WebFunctionsEngine):
             current_time = datetime.datetime.now() - init_time
             time.sleep(5)
 
+    # TODO delete
     @WebFunctionsEngine._validation
     @WebFunctionsEngine._get_web_element_atributte
     def download_action_general(
@@ -629,7 +680,6 @@ class WebFunctions(WebFunctionsEngine):
         :param element_file_name: Set file name with the element selection text
         :param folder_element_name: Set folder name with the element selection text
         """
-        self._warning_message("'download_action' will be discontinued please use 'download_action_general'!")
         # file name
         if not file_name and element_file_name:
             web_element = self._get_element(driver, element_file_name)
@@ -734,7 +784,8 @@ class WebFunctions(WebFunctionsEngine):
             time.sleep(5)
         if finish_action_commands:
             driver.web_engine.execute_commands(driver, finish_action_commands)
-
+        
+        
     @WebFunctionsEngine._validation
     @WebFunctionsEngine._get_web_element_atributte
     def for_each(
@@ -765,6 +816,7 @@ class WebFunctions(WebFunctionsEngine):
         for index, web_element in enumerate(web_elements):
             if find_again:
                 web_element = self._get_elements(driver, elements)[index]
+            
             commands = __replace_commands(copy.deepcopy(action_commands), web_element)
             driver.web_engine.execute_commands(driver, commands)
 
@@ -823,7 +875,15 @@ class WebFunctions(WebFunctionsEngine):
         if last_error:
             message = f"[WebFunctions>try_while: WARNING] {last_error}"
             self._warning_message(message)
-
+            
+            
+    @WebFunctionsEngine._validation
+    @WebFunctionsEngine._get_web_element_atributte
+    def download_image(self, driver:WebDriver, image_element:str=False, image_name:str=False, save_path:str=False) -> None:
+        image_element = self._get_element(driver, image_element)
+        image_src = image_element.get_attribute("src")
+        print(image_src)
+        
 if __name__ == "__main__":
     test = WebFunctions()
     print()

@@ -7,6 +7,9 @@ from .web_functions import WebFunctions
 from threading import Thread
 from threading import Semaphore
 import threading
+from multiprocessing.pool import ThreadPool
+import logging
+from selenium.webdriver.chrome.webdriver import WebDriver
 import numpy as np
 
 class WebEngineMultithread(WebEngine):

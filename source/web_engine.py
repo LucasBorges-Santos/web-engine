@@ -22,10 +22,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
 
 class WebEngine():
-    def __init__(self, error_log_name:bool=False, download_temp_path:str=False, download_path:str=False, commands_path:str=False, commands:list=False, content_variables:dict=False, show_webdriver:bool=False, random_window_size:bool=False, web_functions:bool=True, actions_functions:bool=False, images_folder:str=False, random_agent:bool=False) -> None:
+    def __init__(self, error_log_name:bool=False, download_temp_path:str=False, download_path:str=False, commands_path:str=False, commands:list=False, content_variables:dict=False, more_functions:list={}, show_webdriver:bool=False, random_window_size:bool=False, web_functions:bool=True, actions_functions:bool=False, images_folder:str=False, random_agent:bool=False) -> None:
         self.random_agent = random_agent
         self.show_webdriver = show_webdriver
         self.content_variables = content_variables
+        self._set_more_functions(more_functions)
         self._set_functions(web_functions, actions_functions)
         self.images_folder = images_folder
         self.commands_path = commands_path
@@ -36,6 +37,20 @@ class WebEngine():
         self._set_drive()
         self._set_error_log(error_log_name)
 
+    def _set_more_functions(self, more_functions):
+        """
+        Function to use in "WebFunctionsEngine._set_web_element_functions"; Use "{function_name()}" to use function.
+        
+        !!! "_set_more_functions" functions no accept params yet;
+        
+        Args:
+            more_functions (list[function]): list with functions
+        """
+        self.more_functions = {
+            mfunction.__name__: mfunction
+            for mfunction in more_functions
+        }
+        
     def _set_error_log(self, error_log_name:bool):
         self.error_log_name = error_log_name
         
@@ -44,8 +59,9 @@ class WebEngine():
 
     def _set_functions(self, web_functions=True, actions_functions=False):
         if web_functions:
-            self.web_functions = WebFunctions()
+            self.web_functions = WebFunctions(more_functions=self.more_functions)
             self.functions = self.web_functions.get_web_functions()
+            
             self.has_web_functions = True
         if actions_functions:
             self.actions_functions = ActionsFunctions()
